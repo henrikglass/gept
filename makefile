@@ -12,7 +12,7 @@ C_INCLUDES := -Iinclude
 C_FLAGS    := $(C_WARNINGS) $(C_INCLUDES) --std=c17 -O3 -ggdb3
 
 all:
-        $(CC) $(C_FLAGS) src/gept.c -o $(TARGET)
+	$(CC) $(C_FLAGS) src/gept.c -o $(TARGET)
 
 clean:
-        -rm $(TARGET)
+	-rm $(TARGET)
