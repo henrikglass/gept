@@ -322,11 +322,9 @@ int main(int argc, char *argv[])
             close(pipes[1][0]);
 
             hgl_sb_append(&output, scratch_buf, n_read_bytes);
-            //generate_from_code(lang, output, src);
             hgl_sb_destroy(&source_code);
         }
     }
-
 
     /* print output to stdout */
     printf(HGL_SB_FMT "\n", HGL_SB_ARG(output));
