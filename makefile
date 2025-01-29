@@ -11,8 +11,13 @@ C_WARNINGS := -Werror -Wall -Wlogical-op -Wextra -Wvla -Wnull-dereference \
 C_INCLUDES := -Iinclude
 C_FLAGS    := $(C_WARNINGS) $(C_INCLUDES) --std=c17 -O3 -ggdb3
 
-all:
-	$(CC) $(C_FLAGS) src/gept.c -o $(TARGET)
+all: linux
+
+linux:
+	gcc $(C_FLAGS) src/gept.c -o $(TARGET)
+
+linux-musl:
+	musl-gcc $(C_FLAGS) src/gept.c -o $(TARGET) -static
 
 clean:
 	-rm $(TARGET)
