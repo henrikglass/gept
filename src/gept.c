@@ -78,7 +78,7 @@
  *     * @python ... @end - the `@python` directive is a multi-line directive, which
  *                          takes a python-script and expands to the output of said
  *                          python script.
- *     * @perl ... @end   - the `@python` directive is a multi-line directive, which
+ *     * @perl ... @end   - the `@perl` directive is a multi-line directive, which
  *                          takes a perl-script and expands to the output of said
  *                          perl script.
  *
