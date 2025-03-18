@@ -40,6 +40,9 @@ The following directives are supported:
 takes the path of a file as its argument and, upon
 expansion, embeds it as a comma-separated list of
 byte-sized integers.
+- `@include <file>`  \- the `@include` directive is a single line-directive which
+works the same as the C preprocessor `#include` directive;
+it will simply output the contents of <file>.
 - `@sizeof <file>`   \- the `@sizeof` directive is a single line-directive which
 takes the path of a file as its argument and expands to
 the size of the file.
@@ -49,6 +52,9 @@ bash script.
 - `@python ... @end` \- the `@python` directive is a multi-line directive, which
 takes a python-script and expands to the output of said
 python script.
+- `@perl ... @end`   \- the `@perl` directive is a multi-line directive, which
+takes a perl-script and expands to the output of said
+perl script.
 
 You can get a list of all supportet GEPT options by running `./gept --help`:
 
@@ -56,10 +62,11 @@ You can get a list of all supportet GEPT options by running `./gept --help`:
 GEPT - [GE]neric [P]rogrammable [T]emplates
 Usage: ./gept [Options]
 Options:
--i,--input               Input file path (default = (null))
---python-path            Path to the python3 executable (default = /usr/bin/python3)
---bash-path              Path to the bash executable (default = /bin/bash)
--h,--help                Displays this help message (default = 0)
+  -i,--input               Input file path (default = (null))
+  --python-path            Path to the python3 executable (default = /usr/bin/python3)
+  --perl-path              Path to the perl executable (default = /usr/bin/perl)
+  --bash-path              Path to the bash executable (default = /bin/bash)
+  -h,--help                Displays this help message (default = 0)
 ```
 
 ## Example
