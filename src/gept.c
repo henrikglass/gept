@@ -66,6 +66,9 @@
  *                          takes the path of a file as its argument and, upon
  *                          expansion, embeds it as a comma-separated list of
  *                          byte-sized integers.
+ *     * @include <file>  - the `@include` directive is a single line-directive which
+ *                          works the same as the C preprocessor `#include` directive;
+ *                          it will simply output the contents of <file>.
  *     * @sizeof <file>   - the `@sizeof` directive is a single line-directive which
  *                          takes the path of a file as its argument and expands to
  *                          the size of the file.
@@ -75,6 +78,9 @@
  *     * @python ... @end - the `@python` directive is a multi-line directive, which
  *                          takes a python-script and expands to the output of said
  *                          python script.
+ *     * @perl ... @end   - the `@python` directive is a multi-line directive, which
+ *                          takes a perl-script and expands to the output of said
+ *                          perl script.
  *
  * You can get a list of all supportet GEPT options by running `./gept --help`:
  *
@@ -83,6 +89,7 @@
  *     Options:
  *       -i,--input               Input file path (default = (null))
  *       --python-path            Path to the python3 executable (default = /usr/bin/python3)
+ *       --perl-path              Path to the perl executable (default = /usr/bin/perl)
  *       --bash-path              Path to the bash executable (default = /bin/bash)
  *       -h,--help                Displays this help message (default = 0)
  *
@@ -120,6 +127,7 @@
 
 static const char **opt_infile;
 static const char **opt_python_path;
+static const char **opt_perl_path;
 static const char **opt_bash_path;
 static bool        *opt_help;
 
@@ -132,6 +140,7 @@ int main(int argc, char *argv[])
     /* parse cli arguments */
     opt_infile      = hgl_flags_add_str("-i,--input", "Input file path", NULL, 0);
     opt_python_path = hgl_flags_add_str("--python-path", "Path to the python3 executable", "/usr/bin/python3", 0);
+    opt_perl_path   = hgl_flags_add_str("--perl-path", "Path to the perl executable", "/usr/bin/perl", 0);
     opt_bash_path   = hgl_flags_add_str("--bash-path", "Path to the bash executable", "/bin/bash", 0);
     opt_help        = hgl_flags_add_bool("-h,--help", "Displays this help message", false, 0);
 
@@ -214,13 +223,13 @@ int main(int argc, char *argv[])
             GEPT_ASSERT(file.data != NULL, "Call to `hgl_io_file_mmap` failed.");
 
             /* generate embedding as a list of 8-bit unsigned integers */
-            hgl_sb_grow(&output, output.capacity + file.size); // worst case one extra allocation
+            hgl_sb_grow(&output, output.capacity + 6 * file.size); // probably enough
             const size_t n_bytes_per_row = 20;
             const size_t n_rows = file.size / n_bytes_per_row + 1;
             for (size_t row = 0; row < n_rows; row++) {
                 hgl_sb_append_cstr(&output, "    ");
                 for (size_t i = 0; i < n_bytes_per_row && row*n_bytes_per_row + i < file.size; i++) {
-                    hgl_sb_append_fmt(&output, "%u, ", file.data[row * n_bytes_per_row + i]);
+                    hgl_sb_append_fmt(&output, "0x%02X, ", file.data[row * n_bytes_per_row + i]);
                 }
                 hgl_sb_append_char(&output, '\n');
             }
@@ -229,13 +238,26 @@ int main(int argc, char *argv[])
             hgl_sb_rchop(&output, 3);
             hgl_sb_append_char(&output, '\n');
 
-
             /* close (unmap) file */
             hgl_io_file_munmap(&file);
         }
 
+        /* @include directive */
+        if (hgl_sv_equals(directive, HGL_SV("@include"))) {
+            HglStringView path  = hgl_sv_lchop_until(&tokens, ' ');
+
+            /* construct NULL-terminated path... */
+            GEPT_ASSERT(path.length < 4096, "Path is too long");
+            memcpy(scratch_buf, path.start, path.length);
+            scratch_buf[path.length] = '\0';
+
+            /* append file */
+            hgl_sb_append_file(&output, scratch_buf);
+        }
+
         /* @bash and @python directives */
         if (hgl_sv_equals(directive, HGL_SV("@bash")) ||
+            hgl_sv_equals(directive, HGL_SV("@perl")) ||
             hgl_sv_equals(directive, HGL_SV("@python"))) {
             HglStringBuilder source_code = hgl_sb_make("", 4096);
 
@@ -280,6 +302,9 @@ int main(int argc, char *argv[])
                     execve_argv[2]= NULL;
                 } else if (hgl_sv_equals(directive, HGL_SV("@python"))) {
                     execve_argv[0]= *opt_python_path;
+                    execve_argv[1]= NULL;
+                } else if (hgl_sv_equals(directive, HGL_SV("@perl"))) {
+                    execve_argv[0]= *opt_perl_path;
                     execve_argv[1]= NULL;
                 }
                 char *const execve_envp[1] = {NULL};
