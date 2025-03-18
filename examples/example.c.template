@@ -5,6 +5,8 @@ static const unsigned char TEST_EMBED[] = {
     @embed examples/test_embed.txt
 };
 
+@include examples/test_include.h
+
 static const unsigned char MAKEFILE[] = {
     @embed makefile
 };
