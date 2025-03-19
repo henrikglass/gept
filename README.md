@@ -42,7 +42,7 @@ expansion, embeds it as a comma-separated list of
 byte-sized integers.
 - `@include <file>`  \- the `@include` directive is a single line-directive which
 works the same as the C preprocessor `#include` directive;
-it will simply output the contents of <file>.
+it will simply output the contents of `<file>`.
 - `@sizeof <file>`   \- the `@sizeof` directive is a single line-directive which
 takes the path of a file as its argument and expands to
 the size of the file.
