@@ -119,10 +119,17 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-#define GEPT_ASSERT(arg, ...)                   \
-    if (!(arg)) {                               \
-        fprintf(stderr, "Error: " __VA_ARGS__); \
-        exit(1);                                \
+#define GEPT_ASSERT(arg, ...)                     \
+    if (!(arg)) {                                 \
+        fprintf(stderr, "  ERROR: " __VA_ARGS__); \
+        exit(1);                                  \
+    }
+
+#define GEPT_ASSERT_LINE(line, arg, ...)                                            \
+    if (!(arg)) {                                                                   \
+        fprintf(stderr, "  ERROR on line \"" HGL_SV_FMT "\"\n ", HGL_SV_ARG(line)); \
+        fprintf(stderr, "  description: " __VA_ARGS__);                             \
+        exit(1);                                                                    \
     }
 
 static const char **opt_infile;
@@ -184,18 +191,18 @@ int main(int argc, char *argv[])
             HglStringView path  = hgl_sv_lchop_until(&tokens, ' ');
 
             /* construct NULL-terminated path... */
-            GEPT_ASSERT(path.length < 4096, "Path is too long");
+            GEPT_ASSERT_LINE(line, path.length < 4096, "Path is too long");
             memcpy(scratch_buf, path.start, path.length);
             scratch_buf[path.length] = '\0';
 
             /* open file in read binary mode */
             int fd = open(scratch_buf, O_RDWR);
-            GEPT_ASSERT(fd != -1, "Call to `open` failed.");
+            GEPT_ASSERT_LINE(line, fd != -1, "Call to `open` failed.");
 
             /* get file size */
             struct stat sb;
-            fstat(fd, &sb);
-            GEPT_ASSERT(fd != -1, "Call to `fstat` failed.");
+            err = fstat(fd, &sb);
+            GEPT_ASSERT_LINE(line, err != -1, "Call to `fstat` failed.");
 
             /* append size to output */
             hgl_sb_append_fmt(&output, "    %zu", (size_t) sb.st_size);
@@ -214,13 +221,13 @@ int main(int argc, char *argv[])
             HglStringView path  = hgl_sv_lchop_until(&tokens, ' ');
 
             /* construct NULL-terminated path... */
-            GEPT_ASSERT(path.length < 4096, "Path is too long");
+            GEPT_ASSERT_LINE(line, path.length < 4096, "Path is too long");
             memcpy(scratch_buf, path.start, path.length);
             scratch_buf[path.length] = '\0';
 
             /* open (mmap) file */
             HglFile file = hgl_io_file_mmap(scratch_buf);
-            GEPT_ASSERT(file.data != NULL, "Call to `hgl_io_file_mmap` failed.");
+            GEPT_ASSERT_LINE(line, file.data != NULL, "Call to `hgl_io_file_mmap` failed.");
 
             /* generate embedding as a list of 8-bit unsigned integers */
             hgl_sb_grow(&output, output.capacity + 6 * file.size); // probably enough
@@ -247,7 +254,7 @@ int main(int argc, char *argv[])
             HglStringView path  = hgl_sv_lchop_until(&tokens, ' ');
 
             /* construct NULL-terminated path... */
-            GEPT_ASSERT(path.length < 4096, "Path is too long");
+            GEPT_ASSERT_LINE(line, path.length < 4096, "Path is too long");
             memcpy(scratch_buf, path.start, path.length);
             scratch_buf[path.length] = '\0';
 
@@ -273,8 +280,9 @@ int main(int argc, char *argv[])
                 }
             }
 
-            GEPT_ASSERT(input.length > 0, "Missing terminating `@end` token for matching `" HGL_SV_FMT
-                        "` token", HGL_SV_ARG(directive));
+            GEPT_ASSERT_LINE(line, input.length > 0,
+                             "Missing terminating `@end` token for matching `" HGL_SV_FMT
+                             "` token", HGL_SV_ARG(directive));
 
             int pipes[2][2]; // {{input read end, input write end},
                              //  {output read end, output write end}}
