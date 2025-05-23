@@ -62,25 +62,30 @@
  *
  * The following directives are supported:
  *
- *     * @embed <file>    - the `@embed` directive is a single line-directive which
- *                          takes the path of a file as its argument and, upon
- *                          expansion, embeds it as a comma-separated list of
- *                          byte-sized integers.
- *     * @include <file>  - the `@include` directive is a single line-directive which
- *                          works the same as the C preprocessor `#include` directive;
- *                          it will simply output the contents of <file>.
- *     * @sizeof <file>   - the `@sizeof` directive is a single line-directive which
- *                          takes the path of a file as its argument and expands to
- *                          the size of the file.
- *     * @bash ... @end   - the `@bash` directive is a multi-line directive, which
- *                          takes a bash script and expands to the output of said
- *                          bash script.
- *     * @python ... @end - the `@python` directive is a multi-line directive, which
- *                          takes a python-script and expands to the output of said
- *                          python script.
- *     * @perl ... @end   - the `@perl` directive is a multi-line directive, which
- *                          takes a perl-script and expands to the output of said
- *                          perl script.
+ *     * @embed <file> [limit(N)] - the `@embed` directive is a single line-directive which
+ *                                  takes the path of a file as its argument and, upon
+ *                                  expansion, embeds it as a comma-separated list of
+ *                                  byte-sized integers. Optionally, the `limit(N)` attribute
+ *                                  may be specified. The `limit(N)` attribute puts an upper
+ *                                  limit on the number of bytes to be embedded. This can be 
+ *                                  useful when embedding data from "infinite length" files
+ *                                  such as /dev/urandom or any other device file with special
+ *                                  read semantics.
+ *     * @include <file>          - the `@include` directive is a single line-directive which
+ *                                  works the same as the C preprocessor `#include` directive;
+ *                                  it will simply output the contents of <file>.
+ *     * @sizeof <file>           - the `@sizeof` directive is a single line-directive which
+ *                                  takes the path of a file as its argument and expands to
+ *                                  the size of the file.
+ *     * @bash ... @end           - the `@bash` directive is a multi-line directive, which
+ *                                  takes a bash script and expands to the output of said
+ *                                  bash script.
+ *     * @python ... @end         - the `@python` directive is a multi-line directive, which
+ *                                  takes a python-script and expands to the output of said
+ *                                  python script.
+ *     * @perl ... @end           - the `@perl` directive is a multi-line directive, which
+ *                                  takes a perl-script and expands to the output of said
+ *                                  perl script.
  *
  * You can get a list of all supportet GEPT options by running `./gept --help`:
  *
@@ -111,13 +116,13 @@
 #define HGL_STRING_IMPLEMENTATION
 #include "hgl_string.h"
 
-#define HGL_IO_IMPLEMENTATION
-#include "hgl_io.h"
-
 #include <stdio.h>
 #include <assert.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #define GEPT_ASSERT(arg, ...)                     \
     if (!(arg)) {                                 \
@@ -132,13 +137,15 @@
         exit(1);                                                                    \
     }
 
+#define SCRATCH_BUFFER_SIZE (128*1024*1024)
+
 static const char **opt_infile;
 static const char **opt_python_path;
 static const char **opt_perl_path;
 static const char **opt_bash_path;
 static bool        *opt_help;
 
-static char scratch_buf[128*1024*1024]; // 128 MiB should be enough for most things
+static uint8_t scratch_buf[SCRATCH_BUFFER_SIZE]; // 128 MiB should be enough for most things
 
 int main(int argc, char *argv[])
 {
@@ -196,7 +203,7 @@ int main(int argc, char *argv[])
             scratch_buf[path.length] = '\0';
 
             /* open file in read binary mode */
-            int fd = open(scratch_buf, O_RDWR);
+            int fd = open((char *)scratch_buf, O_RDWR);
             GEPT_ASSERT_LINE(line, fd != -1, "Call to `open` failed.");
 
             /* get file size */
@@ -225,28 +232,49 @@ int main(int argc, char *argv[])
             memcpy(scratch_buf, path.start, path.length);
             scratch_buf[path.length] = '\0';
 
-            /* open (mmap) file */
-            HglFile file = hgl_io_file_mmap(scratch_buf);
-            GEPT_ASSERT_LINE(line, file.data != NULL, "Call to `hgl_io_file_mmap` failed.");
+            /* has limit(n) ? */
+            int64_t limit = SCRATCH_BUFFER_SIZE;
+            tokens = hgl_sv_ltrim(tokens);
+            if (hgl_sv_starts_with_lchop(&tokens, "limit(")) {
+                limit = (int64_t) hgl_sv_lchop_u64(&tokens);
+                GEPT_ASSERT_LINE(line, hgl_sv_starts_with_lchop(&tokens, ")"), "Expected \')\'");
+            }
+
+            /* open file */
+            FILE *fp = fopen((char *) scratch_buf, "rb");
+            GEPT_ASSERT_LINE(line, fp != NULL, "Unable to open file `%s`", scratch_buf);
+
+            /* Get file size if possible */
+            fseek(fp, 0, SEEK_END);
+            int64_t file_size = ftell(fp);
+            rewind(fp);
+            if (file_size <= 0) {
+                file_size = limit;
+            } else {
+                file_size = (file_size < limit) ? file_size : limit; 
+            }
+
+            /* read contents into scratch buffer */
+            fread(scratch_buf, 1, file_size, fp);
 
             /* generate embedding as a list of 8-bit unsigned integers */
-            hgl_sb_grow(&output, output.capacity + 6 * file.size); // probably enough
-            const size_t n_bytes_per_row = 20;
-            const size_t n_rows = file.size / n_bytes_per_row + 1;
-            for (size_t row = 0; row < n_rows; row++) {
+            hgl_sb_grow(&output, output.capacity + 6 * file_size); // probably enough
+            const int64_t n_bytes_per_row = 20;
+            const int64_t n_rows = file_size / n_bytes_per_row + 1;
+            for (int64_t row = 0; row < n_rows; row++) {
                 hgl_sb_append_cstr(&output, "    ");
-                for (size_t i = 0; i < n_bytes_per_row && row*n_bytes_per_row + i < file.size; i++) {
-                    hgl_sb_append_fmt(&output, "0x%02X, ", file.data[row * n_bytes_per_row + i]);
+                for (int64_t i = 0; i < n_bytes_per_row && row*n_bytes_per_row + i < file_size; i++) {
+                    hgl_sb_append_fmt(&output, "0x%02X, ", scratch_buf[row * n_bytes_per_row + i]);
                 }
                 hgl_sb_append_char(&output, '\n');
             }
-
+            
             /* Remove last `,` */
             hgl_sb_rchop(&output, 3);
             hgl_sb_append_char(&output, '\n');
 
-            /* close (unmap) file */
-            hgl_io_file_munmap(&file);
+            /* close file */
+            fclose(fp);
         }
 
         /* @include directive */
@@ -259,7 +287,7 @@ int main(int argc, char *argv[])
             scratch_buf[path.length] = '\0';
 
             /* append file */
-            hgl_sb_append_file(&output, scratch_buf);
+            hgl_sb_append_file(&output, (char *)scratch_buf);
         }
 
         /* @bash and @python directives */
@@ -280,9 +308,8 @@ int main(int argc, char *argv[])
                 }
             }
 
-            GEPT_ASSERT_LINE(line, input.length > 0,
-                             "Missing terminating `@end` token for matching `" HGL_SV_FMT
-                             "` token", HGL_SV_ARG(directive));
+            GEPT_ASSERT(input.length > 0, "Missing terminating `@end` token for matching `" 
+                        HGL_SV_FMT"` token", HGL_SV_ARG(directive));
 
             int pipes[2][2]; // {{input read end, input write end},
                              //  {output read end, output write end}}
@@ -354,7 +381,7 @@ int main(int argc, char *argv[])
             ssize_t n_read_bytes = read(pipes[1][0], scratch_buf, sizeof(scratch_buf) - 1);
             close(pipes[1][0]);
 
-            hgl_sb_append(&output, scratch_buf, n_read_bytes);
+            hgl_sb_append(&output, (char *)scratch_buf, n_read_bytes);
             hgl_sb_destroy(&source_code);
         }
     }

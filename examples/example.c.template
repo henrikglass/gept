@@ -5,10 +5,22 @@ static const unsigned char TEST_EMBED[] = {
     @embed examples/test_embed.txt
 };
 
+static const unsigned char SHORT_TEST_EMBED[] = {
+    @embed examples/test_embed.txt limit(10)
+};
+
 @include examples/test_include.h
 
 static const unsigned char MAKEFILE[] = {
     @embed makefile
+};
+
+static const unsigned char RANDOM[] = {
+    @embed /dev/urandom limit(10)
+};
+
+static const unsigned char ZEORES[] = {
+    @embed /dev/zero limit(10)
 };
 
 static const char *MACHINE_INFO =

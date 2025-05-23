@@ -39,13 +39,13 @@
  *     #include "hgl_flags.h"
  *
  * The max number of allowed flags is 32 by default. To increase this, simply
- * redefine HGL_FLAG_MAX_N_FLAGS before including hgl_flags.h.
+ * redefine HGL_FLAGS_MAX_N_FLAGS before including hgl_flags.h.
  *
  * Code example:
  *
  *     bool *a = hgl_flags_add_bool("-a,--alternative-name", "Simple option for turning something on or off", false, 0);
  *     bool *cmd = hgl_flags_add_bool("-c,--gen-compl-cmd", "Generate a completion command on stdout", false, 0);
- *     int64_t *i = hgl_flags_add_i64_range("-i", "Simple mandatory int option", 0, HGL_FLAG_OPT_MANDATORY, INT_MIN, INT_MAX);
+ *     int64_t *i = hgl_flags_add_i64_range("-i", "Simple mandatory int option", 0, HGL_FLAGS_OPT_MANDATORY, INT_MIN, INT_MAX);
  *     const char **outfile = hgl_flags_add_str("-o,--output", "Output file path", "a.out", 0);
  *
  *     int err = hgl_flags_parse(argc, argv);
@@ -84,16 +84,19 @@
 #include <stdbool.h>
 #include <assert.h>
 
-#ifndef HGL_FLAG_MAX_N_FLAGS
-#define HGL_FLAG_MAX_N_FLAGS 32
+#ifndef HGL_FLAGS_MAX_N_FLAGS
+#define HGL_FLAGS_MAX_N_FLAGS 32
 #endif
-#define HGL_FLAG_OPT_MANDATORY             (1 << 0)
+#ifndef HGL_FLAGS_PRINT_MARGIN
+#define HGL_FLAGS_PRINT_MARGIN 24
+#endif
+#define HGL_FLAGS_OPT_MANDATORY             (1 << 0)
 
-#define HGL_FLAG_STATUS_PARSED             (1 << 0)
-#define HGL_FLAG_STATUS_RANGE_OVERFLOW     (1 << 1)
-#define HGL_FLAG_STATUS_RANGE_UNDERFLOW    (1 << 2)
-#define HGL_FLAG_STATUS_DEFV_OUTSIDE_RANGE (1 << 3)
-#define HGL_FLAG_STATUS_INVALID_RANGE      (1 << 4)
+#define HGL_FLAGS_STATUS_PARSED             (1 << 0)
+#define HGL_FLAGS_STATUS_RANGE_OVERFLOW     (1 << 1)
+#define HGL_FLAGS_STATUS_RANGE_UNDERFLOW    (1 << 2)
+#define HGL_FLAGS_STATUS_DEFV_OUTSIDE_RANGE (1 << 3)
+#define HGL_FLAGS_STATUS_INVALID_RANGE      (1 << 4)
 
 static_assert(sizeof(long) == 8);
 static_assert(sizeof(unsigned long) == 8);
@@ -101,11 +104,11 @@ static_assert(sizeof(double) == 8);
 
 typedef enum
 {
-    HGL_FLAG_KIND_BOOL,
-    HGL_FLAG_KIND_I64,
-    HGL_FLAG_KIND_U64,
-    HGL_FLAG_KIND_F64,
-    HGL_FLAG_KIND_STR
+    HGL_FLAGS_KIND_BOOL,
+    HGL_FLAGS_KIND_I64,
+    HGL_FLAGS_KIND_U64,
+    HGL_FLAGS_KIND_F64,
+    HGL_FLAGS_KIND_STR
 } HglFlagKind;
 
 typedef union
@@ -127,7 +130,8 @@ typedef struct
     HglFlagValue range_min;
     HglFlagValue range_max;
     uint32_t opts;
-    uint32_t status;
+    uint16_t status;
+    int16_t parse_order;
 } HglFlag;
 
 /**
@@ -184,6 +188,20 @@ int hgl_flags_parse(int argc, char *argv[]);
 void hgl_flags_print(void);
 
 /**
+ * Returns `true` if `opt_value` was parsed from the arguments. Conversely, returns
+ * `false` if it simply inherited the default value.
+ */
+bool hgl_flags_occured_in_args(void *opt_value);
+
+/**
+ * Returns `true` if `opt_a` was parsed before `opt_b` from the arguments. If either
+ * option retained it's default value (i.e. it was not parse from the arguments) then
+ * it's treated as occuring "first". If both options retained their default values
+ * then reconsider calling this function.
+ */
+bool hgl_flags_occured_before(void *opt_a, void *opt_b);
+
+/**
  * Generates a completion cmd for the `completion` command line utility on
  * the given stream.
  */
@@ -197,6 +215,7 @@ void hgl_flags_generate_completion_cmd(FILE *stream, const char *program_name);
 #include <string.h>
 #include <limits.h>
 #include <float.h>
+#include <stddef.h>
 
 #define max(a, b) ((a) > (b)) ? (a) : (b)
 #define min(a, b) ((a) < (b)) ? (a) : (b)
@@ -206,7 +225,7 @@ void hgl_flags_generate_completion_cmd(FILE *stream, const char *program_name);
 #define YELLOW "\033[1;33m"
 #define NC     "\033[0m"
 
-static HglFlag hgl_flags_[HGL_FLAG_MAX_N_FLAGS] = {0};
+static HglFlag hgl_flags_[HGL_FLAGS_MAX_N_FLAGS] = {0};
 static size_t hgl_n_flags_ = 0;
 
 HglFlag *hgl_flag_create_(HglFlagKind kind, const char *names, const char *desc,
@@ -220,26 +239,27 @@ HglFlag *hgl_flag_create_(HglFlagKind kind, const char *names, const char *desc,
     hgl_flags_[hgl_n_flags_++] = (HglFlag) {
         .kind          = kind,
         .names         = names,
+        .desc          = desc,
         .default_value = default_value,
         .value         = default_value,
-        .opts          = opts,
-        .desc          = desc,
-        .status        = 0,
         .range_min     = range_min,
         .range_max     = range_max,
+        .opts          = opts,
+        .status        = 0,
+        .parse_order   = -1,
     };
     return &hgl_flags_[hgl_n_flags_ - 1];
 }
 
 bool *hgl_flags_add_bool(const char *names, const char *desc, bool default_value, uint32_t opts)
 {
-    return (bool *) &hgl_flag_create_(HGL_FLAG_KIND_BOOL, names, desc, (HglFlagValue){.b = default_value},
+    return (bool *) &hgl_flag_create_(HGL_FLAGS_KIND_BOOL, names, desc, (HglFlagValue){.b = default_value},
                                       opts, (HglFlagValue){.b = false}, (HglFlagValue){.b = true})->value;
 }
 
 int64_t *hgl_flags_add_i64(const char *names, const char *desc, int64_t default_value, uint32_t opts)
 {
-    return (int64_t *) &hgl_flag_create_(HGL_FLAG_KIND_I64, names, desc, (HglFlagValue) {.i64 = default_value},
+    return (int64_t *) &hgl_flag_create_(HGL_FLAGS_KIND_I64, names, desc, (HglFlagValue) {.i64 = default_value},
                                          opts, (HglFlagValue) {.i64 = LONG_MIN}, (HglFlagValue) {.i64 = LONG_MAX})->value;
 }
 
@@ -248,16 +268,16 @@ int64_t *hgl_flags_add_i64_range(const char *names, const char *desc, int64_t de
 {
     bool invalid_range = (range_min > range_max);
     bool defv_inside_range = (default_value < range_min) || (default_value > range_max);
-    HglFlag *flag = hgl_flag_create_(HGL_FLAG_KIND_I64, names, desc, (HglFlagValue) {.i64 = default_value},
+    HglFlag *flag = hgl_flag_create_(HGL_FLAGS_KIND_I64, names, desc, (HglFlagValue) {.i64 = default_value},
                                      opts, (HglFlagValue) {.i64 = range_min}, (HglFlagValue) {.i64 = range_max});
-    flag->status |= (invalid_range) ? HGL_FLAG_STATUS_INVALID_RANGE : 0;
-    flag->status |= (defv_inside_range) ? HGL_FLAG_STATUS_DEFV_OUTSIDE_RANGE : 0;
+    flag->status |= (invalid_range) ? HGL_FLAGS_STATUS_INVALID_RANGE : 0;
+    flag->status |= (defv_inside_range) ? HGL_FLAGS_STATUS_DEFV_OUTSIDE_RANGE : 0;
     return &flag->value.i64;
 }
 
 uint64_t *hgl_flags_add_u64(const char *names, const char *desc, uint64_t default_value, uint32_t opts)
 {
-    return (uint64_t *) &hgl_flag_create_(HGL_FLAG_KIND_U64, names, desc, (HglFlagValue) {.u64 = default_value},
+    return (uint64_t *) &hgl_flag_create_(HGL_FLAGS_KIND_U64, names, desc, (HglFlagValue) {.u64 = default_value},
                                           opts, (HglFlagValue) {.u64 = 0}, (HglFlagValue) {.u64 = ULONG_MAX})->value;
 }
 
@@ -266,16 +286,16 @@ uint64_t *hgl_flags_add_u64_range(const char *names, const char *desc, uint64_t 
 {
     bool invalid_range = (range_min > range_max);
     bool defv_inside_range = (default_value < range_min) || (default_value > range_max);
-    HglFlag *flag = hgl_flag_create_(HGL_FLAG_KIND_U64, names, desc, (HglFlagValue) {.u64 = default_value},
+    HglFlag *flag = hgl_flag_create_(HGL_FLAGS_KIND_U64, names, desc, (HglFlagValue) {.u64 = default_value},
                                      opts, (HglFlagValue) {.u64 = range_min}, (HglFlagValue) {.u64 = range_max});
-    flag->status |= (invalid_range) ? HGL_FLAG_STATUS_INVALID_RANGE : 0;
-    flag->status |= (defv_inside_range) ? HGL_FLAG_STATUS_DEFV_OUTSIDE_RANGE : 0;
+    flag->status |= (invalid_range) ? HGL_FLAGS_STATUS_INVALID_RANGE : 0;
+    flag->status |= (defv_inside_range) ? HGL_FLAGS_STATUS_DEFV_OUTSIDE_RANGE : 0;
     return &flag->value.u64;
 }
 
 double *hgl_flags_add_f64(const char *names, const char *desc, double default_value, uint32_t opts)
 {
-    return (double *) &hgl_flag_create_(HGL_FLAG_KIND_F64, names, desc, (HglFlagValue) {.f64 = default_value},
+    return (double *) &hgl_flag_create_(HGL_FLAGS_KIND_F64, names, desc, (HglFlagValue) {.f64 = default_value},
                                         opts, (HglFlagValue) {.f64 = -DBL_MAX}, (HglFlagValue) {.f64 = DBL_MAX})->value;
 }
 
@@ -284,16 +304,16 @@ double *hgl_flags_add_f64_range(const char *names, const char *desc, double defa
 {
     bool invalid_range = (range_min > range_max);
     bool defv_inside_range = (default_value < range_min) || (default_value > range_max);
-    HglFlag *flag = hgl_flag_create_(HGL_FLAG_KIND_F64, names, desc, (HglFlagValue) {.f64 = default_value},
+    HglFlag *flag = hgl_flag_create_(HGL_FLAGS_KIND_F64, names, desc, (HglFlagValue) {.f64 = default_value},
                                      opts, (HglFlagValue) {.f64 = range_min}, (HglFlagValue) {.f64 = range_max});
-    flag->status |= (invalid_range) ? HGL_FLAG_STATUS_INVALID_RANGE : 0;
-    flag->status |= (defv_inside_range) ? HGL_FLAG_STATUS_DEFV_OUTSIDE_RANGE : 0;
+    flag->status |= (invalid_range) ? HGL_FLAGS_STATUS_INVALID_RANGE : 0;
+    flag->status |= (defv_inside_range) ? HGL_FLAGS_STATUS_DEFV_OUTSIDE_RANGE : 0;
     return &flag->value.f64;
 }
 
 const char **hgl_flags_add_str(const char *names, const char *desc, const char *default_value, uint32_t opts)
 {
-    return (const char **) &hgl_flag_create_(HGL_FLAG_KIND_STR, names, desc, (HglFlagValue) {.str = default_value},
+    return (const char **) &hgl_flag_create_(HGL_FLAGS_KIND_STR, names, desc, (HglFlagValue) {.str = default_value},
                                              opts, (HglFlagValue) {0}, (HglFlagValue) {0})->value;
 }
 
@@ -347,11 +367,11 @@ int hgl_flags_parse(int argc, char *argv[])
             }
 
             /* if the option takes an argument check that argv[i + 1] exists. */
-            char *next_arg;
+            char *next_arg = NULL;
             char *end;
             HglFlagKind kind = hgl_flags_[j].kind;
-            if ((kind == HGL_FLAG_KIND_I64) || (kind == HGL_FLAG_KIND_U64) ||
-                (kind == HGL_FLAG_KIND_F64) || (kind == HGL_FLAG_KIND_STR)) {
+            if ((kind == HGL_FLAGS_KIND_I64) || (kind == HGL_FLAGS_KIND_U64) ||
+                (kind == HGL_FLAGS_KIND_F64) || (kind == HGL_FLAGS_KIND_STR)) {
                 if (i + 1 >= argc) {
                     fprintf(stderr, BOLD RED "Error:" NC " Option `%s` takes "
                             "an argument. User provided nothing.\n", names);
@@ -365,12 +385,12 @@ int hgl_flags_parse(int argc, char *argv[])
             switch (kind) {
 
                 /* parse simple boolean option flag */
-                case HGL_FLAG_KIND_BOOL: {
+                case HGL_FLAGS_KIND_BOOL: {
                     flag->value.b = true;
                 } break;
 
                 /* parse i64 flag */
-                case HGL_FLAG_KIND_I64: {
+                case HGL_FLAGS_KIND_I64: {
                     int64_t value = strtol(next_arg, &end, 0);
 
                     /* Check if strtol failed */
@@ -386,12 +406,12 @@ int hgl_flags_parse(int argc, char *argv[])
                     int64_t old_value = value;
                     value = min(max(old_value, range_min), range_max);
 
-                    flag->status |= (value > old_value) ? HGL_FLAG_STATUS_RANGE_UNDERFLOW : 0;
-                    flag->status |= (value < old_value) ? HGL_FLAG_STATUS_RANGE_OVERFLOW : 0;
+                    flag->status |= (value > old_value) ? HGL_FLAGS_STATUS_RANGE_UNDERFLOW : 0;
+                    flag->status |= (value < old_value) ? HGL_FLAGS_STATUS_RANGE_OVERFLOW : 0;
                     flag->value.i64 = value;
                 } break;
 
-                case HGL_FLAG_KIND_U64: {
+                case HGL_FLAGS_KIND_U64: {
                     uint64_t value = strtoul(next_arg, &end, 0);
 
                     /* Check if strtol failed */
@@ -407,13 +427,13 @@ int hgl_flags_parse(int argc, char *argv[])
                     uint64_t old_value = value;
                     value = min(max(old_value, range_min), range_max);
 
-                    flag->status |= (value > old_value) ? HGL_FLAG_STATUS_RANGE_UNDERFLOW : 0;
-                    flag->status |= (value < old_value) ? HGL_FLAG_STATUS_RANGE_OVERFLOW : 0;
+                    flag->status |= (value > old_value) ? HGL_FLAGS_STATUS_RANGE_UNDERFLOW : 0;
+                    flag->status |= (value < old_value) ? HGL_FLAGS_STATUS_RANGE_OVERFLOW : 0;
                     flag->value.u64 = value;
                 } break;
 
                 /* parse float64 flag */
-                case HGL_FLAG_KIND_F64: {
+                case HGL_FLAGS_KIND_F64: {
                     double value = strtod(next_arg, &end);
 
                     /* Check if strtof failed */
@@ -429,19 +449,20 @@ int hgl_flags_parse(int argc, char *argv[])
                     double old_value = value;
                     value = min(max(old_value, range_min), range_max);
 
-                    flag->status |= (value > old_value) ? HGL_FLAG_STATUS_RANGE_UNDERFLOW : 0;
-                    flag->status |= (value < old_value) ? HGL_FLAG_STATUS_RANGE_OVERFLOW : 0;
+                    flag->status |= (value > old_value) ? HGL_FLAGS_STATUS_RANGE_UNDERFLOW : 0;
+                    flag->status |= (value < old_value) ? HGL_FLAGS_STATUS_RANGE_OVERFLOW : 0;
                     flag->value.f64 = value;
                 } break;
 
                 /* parse string flag */
-                case HGL_FLAG_KIND_STR: {
+                case HGL_FLAGS_KIND_STR: {
                     flag->value.str = next_arg;
                 } break;
             }
 
-            /* mark flag as parsed */
-            flag->status |= HGL_FLAG_STATUS_PARSED;
+            /* mark flag as parsed and assign a parse order number */
+            flag->status |= HGL_FLAGS_STATUS_PARSED;
+            flag->parse_order = (int16_t) i; // let's hope no one wants to parse 64k options..
         }
 
         if (!match) {
@@ -457,39 +478,39 @@ int hgl_flags_parse(int argc, char *argv[])
         HglFlag flag = hgl_flags_[i];
 
         /* Assert that mandatory flag have been parsed */
-        if (((flag.opts & HGL_FLAG_OPT_MANDATORY) != 0) &&
-            ((flag.status & HGL_FLAG_STATUS_PARSED) == 0)) {
+        if (((flag.opts & HGL_FLAGS_OPT_MANDATORY) != 0) &&
+            ((flag.status & HGL_FLAGS_STATUS_PARSED) == 0)) {
             fprintf(stderr, BOLD RED "Error:" NC " Option marked as mandatory not provided: `%s`\n", flag.names);
             err = 1;
         }
 
         /* Assert that ranged flag has a valid range */
-        if (flag.status & HGL_FLAG_STATUS_INVALID_RANGE) {
+        if (flag.status & HGL_FLAGS_STATUS_INVALID_RANGE) {
             fprintf(stderr, BOLD RED "Error:" NC " Option `%s` has an invalid range. \n", flag.names);
             err = 1;
         }
 
         /* Assert that default value lies inside valid range */
-        if (flag.status & HGL_FLAG_STATUS_DEFV_OUTSIDE_RANGE) {
+        if (flag.status & HGL_FLAGS_STATUS_DEFV_OUTSIDE_RANGE) {
             fprintf(stderr, BOLD RED "Error:" NC " Option `%s` has a default value outside of the valid range. \n", flag.names);
             err = 1;
         }
 
         /* Warn if user provided any out-of-range values */
-        if (flag.status & (HGL_FLAG_STATUS_RANGE_OVERFLOW | HGL_FLAG_STATUS_RANGE_UNDERFLOW)) {
+        if (flag.status & (HGL_FLAGS_STATUS_RANGE_OVERFLOW | HGL_FLAGS_STATUS_RANGE_UNDERFLOW)) {
             fprintf(stderr, BOLD YELLOW "Warning:" NC " Option `%s` was provided with an "
                     "out-of-range value. Value has been clamped to: ", flag.names);
             HglFlagValue val = flag.value;
             HglFlagValue rmin = flag.range_min;
             HglFlagValue rmax = flag.range_max;
             switch (flag.kind) {
-                case HGL_FLAG_KIND_I64: {
+                case HGL_FLAGS_KIND_I64: {
                     fprintf(stderr, "%ld. Valid range = [%ld, %ld]\n", val.i64, rmin.i64, rmax.i64);
                 } break;
-                case HGL_FLAG_KIND_U64: {
+                case HGL_FLAGS_KIND_U64: {
                     fprintf(stderr, "%lu. Valid range = [%lu, %lu]\n", val.u64, rmin.u64, rmax.u64);
                 } break;
-                case HGL_FLAG_KIND_F64: {
+                case HGL_FLAGS_KIND_F64: {
                     fprintf(stderr, "%.8g. Valid range = [%.8g, %.8g]\n", val.f64, rmin.f64, rmax.f64);
                 } break;
                 default: assert(0 && "Unreachable"); break;
@@ -512,27 +533,27 @@ void hgl_flags_print()
         HglFlagValue rmax = hgl_flags_[i].range_max;
         uint32_t opts = hgl_flags_[i].opts;
         switch (kind) {
-            case HGL_FLAG_KIND_BOOL: {
-                printf("  %-24s %s (default = %d)", names, desc, defv.b); break;
+            case HGL_FLAGS_KIND_BOOL: {
+                printf("  %-*s %s (default = %d)", -HGL_FLAGS_PRINT_MARGIN, names, desc, defv.b); break;
             } break;
-            case HGL_FLAG_KIND_I64: {
-                printf("  %-24s %s (default = %ld, valid range = [%ld, %ld])",
-                       names, desc, defv.i64, rmin.i64, rmax.i64);
+            case HGL_FLAGS_KIND_I64: {
+                printf("  %-*s %s (default = %ld, valid range = [%ld, %ld])",
+                       -HGL_FLAGS_PRINT_MARGIN, names, desc, defv.i64, rmin.i64, rmax.i64);
             } break;
-            case HGL_FLAG_KIND_U64: {
-                printf("  %-24s %s (default = %lu, valid range = [%lu, %lu])",
-                       names, desc, defv.u64, rmin.u64, rmax.u64);
+            case HGL_FLAGS_KIND_U64: {
+                printf("  %-*s %s (default = %lu, valid range = [%lu, %lu])",
+                       -HGL_FLAGS_PRINT_MARGIN, names, desc, defv.u64, rmin.u64, rmax.u64);
             } break;
-            case HGL_FLAG_KIND_F64: {
-                printf("  %-24s %s (default = %.8g, valid range = [%.8g, %.8g])",
-                       names, desc, defv.f64, rmin.f64, rmax.f64);
+            case HGL_FLAGS_KIND_F64: {
+                printf("  %-*s %s (default = %.8g, valid range = [%.8g, %.8g])",
+                       -HGL_FLAGS_PRINT_MARGIN, names, desc, defv.f64, rmin.f64, rmax.f64);
             } break;
-            case HGL_FLAG_KIND_STR: {
-                printf("  %-24s %s (default = %s)", names, desc, defv.str); break;
+            case HGL_FLAGS_KIND_STR: {
+                printf("  %-*s %s (default = %s)", -HGL_FLAGS_PRINT_MARGIN, names, desc, defv.str); break;
             } break;
         }
 
-        if (opts & HGL_FLAG_OPT_MANDATORY) {
+        if (opts & HGL_FLAGS_OPT_MANDATORY) {
             printf(" -- MANDATORY");
         }
 
@@ -540,6 +561,25 @@ void hgl_flags_print()
     }
 }
 
+bool hgl_flags_occured_in_args(void *opt)
+{
+    uint8_t *ptr8 = (uint8_t *) opt;
+    ptr8 -= offsetof(HglFlag, value);
+    HglFlag *flag = (HglFlag *) ptr8;
+
+    return ((flag->status & HGL_FLAGS_STATUS_PARSED) != 0);
+}
+
+bool hgl_flags_occured_before(void *opt_a, void *opt_b)
+{
+    uint8_t *ptr8_a = (uint8_t *) opt_a;
+    uint8_t *ptr8_b = (uint8_t *) opt_b;
+    ptr8_a -= offsetof(HglFlag, value);
+    ptr8_b -= offsetof(HglFlag, value);
+    HglFlag *flag_a = (HglFlag *) ptr8_a;
+    HglFlag *flag_b = (HglFlag *) ptr8_b;
+    return (flag_a->parse_order < flag_b->parse_order);
+}
 
 void hgl_flags_generate_completion_cmd(FILE *stream, const char *program_name)
 {

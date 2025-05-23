@@ -37,12 +37,15 @@ string "@end".
 The following directives are supported:
 
 - `@embed <file>`    \- the `@embed` directive is a single line-directive which
-takes the path of a file as its argument and, upon
-expansion, embeds it as a comma-separated list of
-byte-sized integers.
+takes the path of a file as its argument and, upon expansion, embeds it as a 
+comma-separated list of byte-sized integers. Optionally, the `limit(N)` 
+attribute may be specified. The `limit(N)` attribute puts an upper limit on the 
+number of bytes to be embedded. This can be useful when embedding data from 
+"infinite length" files such as /dev/urandom or any other device file with special
+read semantics.
 - `@include <file>`  \- the `@include` directive is a single line-directive which
 works the same as the C preprocessor `#include` directive;
-it will simply output the contents of `<file>`.
+it will simply output the contents of <file>.
 - `@sizeof <file>`   \- the `@sizeof` directive is a single line-directive which
 takes the path of a file as its argument and expands to
 the size of the file.
