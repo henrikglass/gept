@@ -64,13 +64,15 @@
  *
  *     * @embed <file> [limit(N)] - the `@embed` directive is a single line-directive which
  *                                  takes the path of a file as its argument and, upon
- *                                  expansion, embeds it as a comma-separated list of
+ *                                  expansion, embeds it as a comma-separated (default) list of
  *                                  byte-sized integers. Optionally, the `limit(N)` attribute
  *                                  may be specified. The `limit(N)` attribute puts an upper
- *                                  limit on the number of bytes to be embedded. This can be 
+ *                                  limit on the number of bytes to be embedded. This can be
  *                                  useful when embedding data from "infinite length" files
  *                                  such as /dev/urandom or any other device file with special
- *                                  read semantics.
+ *                                  read semantics. The default @embed byte format and delimiter
+ *                                  may be changed using the `--embed-fmt` and `--embed-delim`
+ *                                  command-line options.
  *     * @include <file>          - the `@include` directive is a single line-directive which
  *                                  works the same as the C preprocessor `#include` directive;
  *                                  it will simply output the contents of <file>.
@@ -96,6 +98,8 @@
  *       --python-path            Path to the python3 executable (default = /usr/bin/python3)
  *       --perl-path              Path to the perl executable (default = /usr/bin/perl)
  *       --bash-path              Path to the bash executable (default = /bin/bash)
+ *       --embed-fmt              C-style format string used by the @embed directive. (default = 0x%02X)
+ *       --embed-delim            Delimiter string used by the @embed directive (default = , )
  *       -h,--help                Displays this help message (default = 0)
  *
  *
@@ -143,6 +147,8 @@ static const char **opt_infile;
 static const char **opt_python_path;
 static const char **opt_perl_path;
 static const char **opt_bash_path;
+static const char **opt_embed_fmt;
+static const char **opt_embed_delim;
 static bool        *opt_help;
 
 static uint8_t scratch_buf[SCRATCH_BUFFER_SIZE]; // 128 MiB should be enough for most things
@@ -156,6 +162,8 @@ int main(int argc, char *argv[])
     opt_python_path = hgl_flags_add_str("--python-path", "Path to the python3 executable", "/usr/bin/python3", 0);
     opt_perl_path   = hgl_flags_add_str("--perl-path", "Path to the perl executable", "/usr/bin/perl", 0);
     opt_bash_path   = hgl_flags_add_str("--bash-path", "Path to the bash executable", "/bin/bash", 0);
+    opt_embed_fmt   = hgl_flags_add_str("--embed-fmt", "C-style format string used by the @embed directive.", "0x%02X", 0);
+    opt_embed_delim = hgl_flags_add_str("--embed-delim", "Delimiter string used by the @embed directive", ", ", 0);
     opt_help        = hgl_flags_add_bool("-h,--help", "Displays this help message", false, 0);
 
     err = hgl_flags_parse(argc, argv);
@@ -251,7 +259,7 @@ int main(int argc, char *argv[])
             if (file_size <= 0) {
                 file_size = limit;
             } else {
-                file_size = (file_size < limit) ? file_size : limit; 
+                file_size = (file_size < limit) ? file_size : limit;
             }
 
             /* read contents into scratch buffer */
@@ -264,13 +272,14 @@ int main(int argc, char *argv[])
             for (int64_t row = 0; row < n_rows; row++) {
                 hgl_sb_append_cstr(&output, "    ");
                 for (int64_t i = 0; i < n_bytes_per_row && row*n_bytes_per_row + i < file_size; i++) {
-                    hgl_sb_append_fmt(&output, "0x%02X, ", scratch_buf[row * n_bytes_per_row + i]);
+                    hgl_sb_append_fmt(&output, *opt_embed_fmt, scratch_buf[row * n_bytes_per_row + i]);
+                    hgl_sb_append_cstr(&output, *opt_embed_delim);
                 }
                 hgl_sb_append_char(&output, '\n');
             }
-            
-            /* Remove last `,` */
-            hgl_sb_rchop(&output, 3);
+
+            /* Remove last delimiter (typically `,`) */
+            hgl_sb_rchop(&output, 1 + strlen(*opt_embed_delim));
             hgl_sb_append_char(&output, '\n');
 
             /* close file */
@@ -308,7 +317,7 @@ int main(int argc, char *argv[])
                 }
             }
 
-            GEPT_ASSERT(input.length > 0, "Missing terminating `@end` token for matching `" 
+            GEPT_ASSERT(input.length > 0, "Missing terminating `@end` token for matching `"
                         HGL_SV_FMT"` token", HGL_SV_ARG(directive));
 
             int pipes[2][2]; // {{input read end, input write end},
