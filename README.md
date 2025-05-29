@@ -44,7 +44,7 @@ may be specified. The `limit(N)` attribute puts an upper
 limit on the number of bytes to be embedded. This can be
 useful when embedding data from "infinite length" files
 such as /dev/urandom or any other device file with special
-read semantics. The default @embed byte format and delimiter
+read semantics. The default `@embed` byte format and delimiter
 may be changed using the `--embed-fmt` and `--embed-delim`
 command-line options.
 - `@include <file>`  \- the `@include` directive is a single line-directive which
