@@ -36,13 +36,17 @@ string "@end".
 
 The following directives are supported:
 
-- `@embed <file>`    \- the `@embed` directive is a single line-directive which
-takes the path of a file as its argument and, upon expansion, embeds it as a 
-comma-separated list of byte-sized integers. Optionally, the `limit(N)` 
-attribute may be specified. The `limit(N)` attribute puts an upper limit on the 
-number of bytes to be embedded. This can be useful when embedding data from 
-"infinite length" files such as /dev/urandom or any other device file with special
-read semantics.
+- `@embed <file> [limit(N)]` \- the `@embed` directive is a single line-directive which
+takes the path of a file as its argument and, upon
+expansion, embeds it as a comma-separated (default) list of
+byte-sized integers. Optionally, the `limit(N)` attribute
+may be specified. The `limit(N)` attribute puts an upper
+limit on the number of bytes to be embedded. This can be
+useful when embedding data from "infinite length" files
+such as /dev/urandom or any other device file with special
+read semantics. The default @embed byte format and delimiter
+may be changed using the `--embed-fmt` and `--embed-delim`
+command-line options.
 - `@include <file>`  \- the `@include` directive is a single line-directive which
 works the same as the C preprocessor `#include` directive;
 it will simply output the contents of <file>.
@@ -69,6 +73,8 @@ Options:
   --python-path            Path to the python3 executable (default = /usr/bin/python3)
   --perl-path              Path to the perl executable (default = /usr/bin/perl)
   --bash-path              Path to the bash executable (default = /bin/bash)
+  --embed-fmt              C-style format string used by the @embed directive. (default = 0x%02X)
+  --embed-delim            Delimiter string used by the @embed directive (default = , )
   -h,--help                Displays this help message (default = 0)
 ```
 
