@@ -263,7 +263,8 @@ int main(int argc, char *argv[])
             }
 
             /* read contents into scratch buffer */
-            fread(scratch_buf, 1, file_size, fp);
+            ssize_t n_read_bytes = fread(scratch_buf, 1, file_size, fp);
+            (void) n_read_bytes;
 
             /* generate embedding as a list of 8-bit unsigned integers */
             hgl_sb_grow(&output, output.capacity + 6 * file_size); // probably enough
@@ -373,7 +374,8 @@ int main(int argc, char *argv[])
              * Write source code contents on the stdin of the process then
              * immediately close the pipe.
              */
-            write(pipes[0][1], source_code.cstr, source_code.length);
+            ssize_t n_written_bytes = write(pipes[0][1], source_code.cstr, source_code.length);
+            (void) n_written_bytes;
             close(pipes[0][1]);
 
             /* wait for process to terminate */
