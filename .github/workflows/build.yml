@@ -13,14 +13,14 @@ jobs:
     - uses: actions/checkout@v4
     - name: build
       run: make linux
-  test:
+  build-musl:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: musl musl-dev
-          version: 1.0
+      with:
+        packages: musl musl-dev
+        version: 1.0
     - name: build-musl 
       run: make linux-musl
     
