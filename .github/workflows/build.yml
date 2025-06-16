@@ -19,7 +19,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: awalsh128/cache-apt-pkgs-action@latest
       with:
-        packages: musl musl-dev
+        packages: musl musl-dev musl-tools
         version: 1.0
     - name: build-musl 
       run: make linux-musl
