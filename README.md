@@ -1,3 +1,5 @@
+[![Build](https://github.com/henrikglass/gept/actions/workflows/build.yml/badge.svg)](https://github.com/henrikglass/gept/actions/workflows/build.yml)
+
 # GEPT - [GE]neric [P]rogrammable [T]emplates
 
 ## Building
