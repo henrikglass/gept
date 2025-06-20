@@ -1,0 +1,9 @@
+
+This template will only produce an output in YOLO-mode.
+
+--START--
+@bash
+    touch kalas.txt && echo "hello" > kalas.txt && echo "hej"
+@end
+--END--
+

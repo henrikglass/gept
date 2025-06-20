@@ -65,20 +65,29 @@ python script.
 takes a perl-script and expands to the output of said
 perl script.
 
+By default, GEPT uses firejail to run subprocesses in a semi-sandboxed environment where
+they can't make any changes to the file system (with a few exceptions, such as /tmp). This
+is done to ensure that the @bash, @python, and @perl directives don't have any side effects
+other than writing to stdout and to avoid possible footguns. Sandboxing can be disabled by 
+running gept with the `--yolo` option which enables "YOLO-mode".
+
 You can get a list of all supportet GEPT options by running `./gept --help`:
 
 ```
-GEPT - [GE]neric [P]rogrammable [T]emplates
-Usage: ./gept [Options]
-Options:
-  -i,--input               Input file path (default = (null))
-  --python-path            Path to the python3 executable (default = /usr/bin/python3)
-  --perl-path              Path to the perl executable (default = /usr/bin/perl)
-  --bash-path              Path to the bash executable (default = /bin/bash)
-  --embed-fmt              C-style format string used by the @embed directive. (default = 0x%02X)
-  --embed-delim            Delimiter string used by the @embed directive (default = , )
-  -h,--help                Displays this help message (default = 0)
+    GEPT - [GE]neric [P]rogrammable [T]emplates
+    Usage: ./gept [Options]
+    Options:
+      -i,--input               Input file path (default = (null))
+      --firejail-path          Alternative path to the firejail executable (default = (null))
+      --python-path            Alternative path to the python3 executable (default = (null))
+      --perl-path              Alternative path to the perl executable (default = (null))
+      --bash-path              Alternative path to the bash executable (default = (null))
+      --embed-fmt              C-style format string used by the @embed directive. (default = 0x%02X)
+      --embed-delim            Delimiter string used by the @embed directive (default = , )
+      -yolo, --yolo            Enable YOLO-mode. Run @python, @perl, and @bash in a non-sandboxed environment. (default = 0)
+      -h,--help                Displays this help message (default = 0)
 ```
+
 
 ## Example
 

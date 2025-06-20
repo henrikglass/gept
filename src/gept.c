@@ -89,19 +89,27 @@
  *                                  takes a perl-script and expands to the output of said
  *                                  perl script.
  *
+ * By default, GEPT uses firejail to run subprocesses in a semi-sandboxed environment where
+ * they can't make any changes to the file system (with a few exceptions, such as /tmp). This
+ * is done to ensure that the @bash, @python, and @perl directives don't have any side effects
+ * other than writing to stdout and to avoid possible footguns. Sandboxing can be disabled by 
+ * running gept with the `--yolo` option which enables "YOLO-mode".
+ *
  * You can get a list of all supportet GEPT options by running `./gept --help`:
  *
  *     GEPT - [GE]neric [P]rogrammable [T]emplates
  *     Usage: ./gept [Options]
  *     Options:
  *       -i,--input               Input file path (default = (null))
- *       --python-path            Path to the python3 executable (default = /usr/bin/python3)
- *       --perl-path              Path to the perl executable (default = /usr/bin/perl)
- *       --bash-path              Path to the bash executable (default = /bin/bash)
+ *       --firejail-path          Alternative path to the firejail executable (default = (null))
+ *       --python-path            Alternative path to the python3 executable (default = (null))
+ *       --perl-path              Alternative path to the perl executable (default = (null))
+ *       --bash-path              Alternative path to the bash executable (default = (null))
  *       --embed-fmt              C-style format string used by the @embed directive. (default = 0x%02X)
  *       --embed-delim            Delimiter string used by the @embed directive (default = , )
+ *       -yolo, --yolo            Enable YOLO-mode. Run @python, @perl, and @bash in a non-sandboxed environment. (default = 0)
  *       -h,--help                Displays this help message (default = 0)
- *
+ * 
  *
  * EXAMPLE:
  *
@@ -144,11 +152,13 @@
 #define SCRATCH_BUFFER_SIZE (128*1024*1024)
 
 static const char **opt_infile;
+static const char **opt_firejail_path;
 static const char **opt_python_path;
 static const char **opt_perl_path;
 static const char **opt_bash_path;
 static const char **opt_embed_fmt;
 static const char **opt_embed_delim;
+static bool        *opt_yolo;
 static bool        *opt_help;
 
 static uint8_t scratch_buf[SCRATCH_BUFFER_SIZE]; // 128 MiB should be enough for most things
@@ -158,13 +168,15 @@ int main(int argc, char *argv[])
     int err;
 
     /* parse cli arguments */
-    opt_infile      = hgl_flags_add_str("-i,--input", "Input file path", NULL, 0);
-    opt_python_path = hgl_flags_add_str("--python-path", "Path to the python3 executable", "/usr/bin/python3", 0);
-    opt_perl_path   = hgl_flags_add_str("--perl-path", "Path to the perl executable", "/usr/bin/perl", 0);
-    opt_bash_path   = hgl_flags_add_str("--bash-path", "Path to the bash executable", "/bin/bash", 0);
-    opt_embed_fmt   = hgl_flags_add_str("--embed-fmt", "C-style format string used by the @embed directive.", "0x%02X", 0);
-    opt_embed_delim = hgl_flags_add_str("--embed-delim", "Delimiter string used by the @embed directive", ", ", 0);
-    opt_help        = hgl_flags_add_bool("-h,--help", "Displays this help message", false, 0);
+    opt_infile        = hgl_flags_add_str("-i,--input", "Input file path", NULL, 0);
+    opt_firejail_path = hgl_flags_add_str("--firejail-path", "Alternative path to the firejail executable", NULL, 0);
+    opt_python_path   = hgl_flags_add_str("--python-path", "Alternative path to the python3 executable", NULL, 0);
+    opt_perl_path     = hgl_flags_add_str("--perl-path", "Alternative path to the perl executable", NULL, 0);
+    opt_bash_path     = hgl_flags_add_str("--bash-path", "Alternative path to the bash executable", NULL, 0);
+    opt_embed_fmt     = hgl_flags_add_str("--embed-fmt", "C-style format string used by the @embed directive.", "0x%02X", 0);
+    opt_embed_delim   = hgl_flags_add_str("--embed-delim", "Delimiter string used by the @embed directive", ", ", 0);
+    opt_yolo          = hgl_flags_add_bool("-yolo, --yolo", "Enable YOLO-mode. Run @python, @perl, and @bash in a non-sandboxed environment.", false, 0);
+    opt_help          = hgl_flags_add_bool("-h,--help", "Displays this help message", false, 0);
 
     err = hgl_flags_parse(argc, argv);
     if (err != 0 || *opt_help || *opt_infile == NULL) {
@@ -172,6 +184,51 @@ int main(int argc, char *argv[])
         printf("Usage: %s [Options]\n", argv[0]);
         hgl_flags_print();
         return 1;
+    }
+
+    int devnull = open("/dev/null", O_WRONLY);
+    GEPT_ASSERT(devnull != - 1, "Unable to open /dev/null for writing.\n");
+
+    /* Check that firejail is installed if not running in YOLO-mode. */
+    if (!*opt_yolo) {
+        pid_t pid = fork();
+
+        /* ======== child ======== */
+        if (pid == 0) {
+            /* redirect stdout to the void */
+            dup2(devnull, STDOUT_FILENO);
+            dup2(devnull, STDERR_FILENO);
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
+            char *exec_argv[3];
+            exec_argv[0] = "which";
+            exec_argv[1] = (*opt_firejail_path == NULL) ? "firejail": *opt_firejail_path;
+            exec_argv[2] = NULL;
+#pragma GCC diagnostic pop
+
+            /* on success `execve` doesn't return */
+            if (-1 == execvp(exec_argv[0], exec_argv)) {
+                fprintf(stderr, "ERROR (IN CHILD): failed to exec file. errno=%s\n",
+                        strerror(errno));
+                exit(1);
+            }
+            GEPT_ASSERT(0, "unreachable");
+        }
+
+        /* wait for process to terminate */
+        pid_t wait_pid;
+        int wstatus = 0;
+        while ((wait_pid = waitpid(pid, &wstatus, 0)) != pid) {
+            GEPT_ASSERT(wait_pid != -1, "waitpid() returned an error. errno=%s\n", strerror(errno));
+        }
+        if (WEXITSTATUS(wstatus) != 0) {
+            fprintf(stderr, "Error: GEPT could not find a firejail executable installed on \n"); 
+            fprintf(stderr, "       your system. Please make sure firejail is installed or, \n");
+            fprintf(stderr, "       if you know what you're doing, run GEPT in \"YOLO mode\" \n");
+            fprintf(stderr, "       by passing the `--yolo` option. \n");
+            exit(1);
+        }
     }
 
     /* open template file */
@@ -335,28 +392,45 @@ int main(int argc, char *argv[])
                 close(pipes[1][0]);
                 dup2(pipes[0][0], STDIN_FILENO);
                 dup2(pipes[1][1], STDOUT_FILENO);
+                //dup2(devnull, STDERR_FILENO);
 
-                /* select which executable to run */
+                char *exec_argv[32];
+                int exec_argv_idx = 0;
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
                 /* There is no reasonable const-correct way to do this*/
-                char *execve_argv[3];
-                if (hgl_sv_equals(directive, HGL_SV("@bash"))) {
-                    execve_argv[0]= *opt_bash_path;
-                    execve_argv[1]= "-s";
-                    execve_argv[2]= NULL;
-                } else if (hgl_sv_equals(directive, HGL_SV("@python"))) {
-                    execve_argv[0]= *opt_python_path;
-                    execve_argv[1]= NULL;
-                } else if (hgl_sv_equals(directive, HGL_SV("@perl"))) {
-                    execve_argv[0]= *opt_perl_path;
-                    execve_argv[1]= NULL;
+
+                /* 
+                 * Run in a read-only view of the file system unless explicitly told "YOLO"
+                 * by the user.
+                 *
+                 * TODO figure out what other flags to use.
+                 */
+                if (!*opt_yolo) {
+                    exec_argv[exec_argv_idx++] = (*opt_firejail_path == NULL) ? "firejail": *opt_firejail_path;
+                    exec_argv[exec_argv_idx++] = "--read-only=~/";
+                    exec_argv[exec_argv_idx++] = "--caps.drop=all";
+                    exec_argv[exec_argv_idx++] = "--protocol=netlink";
+                    exec_argv[exec_argv_idx++] = "--quiet";
                 }
-                char *const execve_envp[1] = {NULL};
+
+                /* select which executable to run */
+                if (hgl_sv_equals(directive, HGL_SV("@bash"))) {
+                    exec_argv[exec_argv_idx++]= (*opt_bash_path == NULL) ? "bash" : *opt_bash_path;
+                    exec_argv[exec_argv_idx++]= "-s";
+                    exec_argv[exec_argv_idx++]= NULL;
+                } else if (hgl_sv_equals(directive, HGL_SV("@python"))) {
+                    exec_argv[exec_argv_idx++]= (*opt_python_path == NULL) ? "python3" : *opt_python_path;
+                    exec_argv[exec_argv_idx++]= NULL;
+                } else if (hgl_sv_equals(directive, HGL_SV("@perl"))) {
+                    exec_argv[exec_argv_idx++]= (*opt_perl_path == NULL) ? "perl" : *opt_perl_path;
+                    exec_argv[exec_argv_idx++]= NULL;
+                }
 #pragma GCC diagnostic pop
 
                 /* on success `execve` doesn't return */
-                if (-1 == execve(execve_argv[0], execve_argv, execve_envp)) {
+                if (-1 == execvp(exec_argv[0], exec_argv)) {
                     fprintf(stderr, "ERROR (IN CHILD): failed to exec file. errno=%s\n",
                             strerror(errno));
                     exit(1);
@@ -403,6 +477,8 @@ int main(int argc, char *argv[])
     /* cleanup */
     hgl_sb_destroy(&input_sb);
     hgl_sb_destroy(&output);
+
+    close(devnull);
 
     return 0;
 }
