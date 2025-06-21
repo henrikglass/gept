@@ -77,13 +77,13 @@ You can get a list of all supportet GEPT options by running `./gept --help`:
     GEPT - [GE]neric [P]rogrammable [T]emplates
     Usage: ./gept [Options]
     Options:
-      -i,--input               Input file path (default = (null))
-      --firejail-path          Alternative path to the firejail executable (default = (null))
-      --python-path            Alternative path to the python3 executable (default = (null))
-      --perl-path              Alternative path to the perl executable (default = (null))
-      --bash-path              Alternative path to the bash executable (default = (null))
-      --embed-fmt              C-style format string used by the @embed directive. (default = 0x%02X)
-      --embed-delim            Delimiter string used by the @embed directive (default = , )
+      -i,--input               Input file path (default = -)
+      --firejail-path          Alternative path to the firejail executable (default = -)
+      --python-path            Alternative path to the python3 executable (default = -)
+      --perl-path              Alternative path to the perl executable (default = -)
+      --bash-path              Alternative path to the bash executable (default = -)
+      --embed-fmt              C-style format string used by the @embed directive. (default = "0x%02X")
+      --embed-delim            Delimiter string used by the @embed directive (default = ", ")
       -yolo, --yolo            Enable YOLO-mode. Run @python, @perl, and @bash in a non-sandboxed environment. (default = 0)
       -h,--help                Displays this help message (default = 0)
 ```
