@@ -483,3 +483,5 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+// TODO: Better error messages. Especially when subprocesses fail.
+
