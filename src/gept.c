@@ -259,7 +259,7 @@ int main(int argc, char *argv[])
         HglStringView directive = hgl_sv_lchop_until(&tokens, ' ');
 
         /* @sizeof directive */
-        if (hgl_sv_equals(directive, HGL_SV("@sizeof"))) {
+        if (hgl_sv_equals(directive, HGL_SV_LIT("@sizeof"))) {
             HglStringView path  = hgl_sv_lchop_until(&tokens, ' ');
 
             /* construct NULL-terminated path... */
@@ -289,7 +289,7 @@ int main(int argc, char *argv[])
         }
 
         /* @embed directive */
-        if (hgl_sv_equals(directive, HGL_SV("@embed"))) {
+        if (hgl_sv_equals(directive, HGL_SV_LIT("@embed"))) {
             HglStringView path  = hgl_sv_lchop_until(&tokens, ' ');
 
             /* construct NULL-terminated path... */
@@ -345,7 +345,7 @@ int main(int argc, char *argv[])
         }
 
         /* @include directive */
-        if (hgl_sv_equals(directive, HGL_SV("@include"))) {
+        if (hgl_sv_equals(directive, HGL_SV_LIT("@include"))) {
             HglStringView path  = hgl_sv_lchop_until(&tokens, ' ');
 
             /* construct NULL-terminated path... */
@@ -358,9 +358,9 @@ int main(int argc, char *argv[])
         }
 
         /* @bash and @python directives */
-        if (hgl_sv_equals(directive, HGL_SV("@bash")) ||
-            hgl_sv_equals(directive, HGL_SV("@perl")) ||
-            hgl_sv_equals(directive, HGL_SV("@python"))) {
+        if (hgl_sv_equals(directive, HGL_SV_LIT("@bash")) ||
+            hgl_sv_equals(directive, HGL_SV_LIT("@perl")) ||
+            hgl_sv_equals(directive, HGL_SV_LIT("@python"))) {
             HglStringBuilder source_code = hgl_sb_make("", 4096);
 
             while (input.length > 0) {
@@ -416,14 +416,14 @@ int main(int argc, char *argv[])
                 }
 
                 /* select which executable to run */
-                if (hgl_sv_equals(directive, HGL_SV("@bash"))) {
+                if (hgl_sv_equals(directive, HGL_SV_LIT("@bash"))) {
                     exec_argv[exec_argv_idx++]= (*opt_bash_path == NULL) ? "bash" : *opt_bash_path;
                     exec_argv[exec_argv_idx++]= "-s";
                     exec_argv[exec_argv_idx++]= NULL;
-                } else if (hgl_sv_equals(directive, HGL_SV("@python"))) {
+                } else if (hgl_sv_equals(directive, HGL_SV_LIT("@python"))) {
                     exec_argv[exec_argv_idx++]= (*opt_python_path == NULL) ? "python3" : *opt_python_path;
                     exec_argv[exec_argv_idx++]= NULL;
-                } else if (hgl_sv_equals(directive, HGL_SV("@perl"))) {
+                } else if (hgl_sv_equals(directive, HGL_SV_LIT("@perl"))) {
                     exec_argv[exec_argv_idx++]= (*opt_perl_path == NULL) ? "perl" : *opt_perl_path;
                     exec_argv[exec_argv_idx++]= NULL;
                 }
