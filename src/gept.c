@@ -418,6 +418,9 @@ int main(int argc, char *argv[])
                 /* select which executable to run */
                 if (hgl_sv_equals(directive, HGL_SV_LIT("@bash"))) {
                     exec_argv[exec_argv_idx++]= (*opt_bash_path == NULL) ? "bash" : *opt_bash_path;
+                    exec_argv[exec_argv_idx++]= "--norc";
+                    exec_argv[exec_argv_idx++]= "--noprofile";
+                    exec_argv[exec_argv_idx++]= "-r";
                     exec_argv[exec_argv_idx++]= "-s";
                     exec_argv[exec_argv_idx++]= NULL;
                 } else if (hgl_sv_equals(directive, HGL_SV_LIT("@python"))) {
