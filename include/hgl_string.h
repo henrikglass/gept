@@ -1323,7 +1323,7 @@ typedef HglStringBuilder StringBuilder;
 #define sv_lchop_u64             hgl_sv_lchop_u64
 #define sv_lchop_i64             hgl_sv_lchop_i64
 #define sv_lchop_f64             hgl_sv_lchop_f64
-#define sv_starts_with_lchop     hgl_sv_starts_with_lchop
+#define sv_lchop_if_starts_with  hgl_sv_lchop_if_starts_with
 #define sv_starts_with_lexeme    hgl_sv_starts_with_lexeme
 #define sv_contains              hgl_sv_contains
 #define sv_starts_with           hgl_sv_starts_with
