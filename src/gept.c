@@ -233,8 +233,8 @@ int main(int argc, char *argv[])
 
     /* open template file */
     HglStringView input;
-    HglStringBuilder output = hgl_sb_make("", 4096);
-    HglStringBuilder input_sb = hgl_sb_make("", 4096);
+    HglStringBuilder output = hgl_sb_make(.initial_capacity = 4096);
+    HglStringBuilder input_sb = hgl_sb_make(.initial_capacity = 4096);
     err = hgl_sb_append_file(&input_sb, *opt_infile);
     GEPT_ASSERT(err == 0, "Call to `hgl_sb_append_file` failed.\n");
     input = hgl_sv_from_sb(&input_sb);
@@ -300,9 +300,9 @@ int main(int argc, char *argv[])
             /* has limit(n) ? */
             int64_t limit = SCRATCH_BUFFER_SIZE;
             tokens = hgl_sv_ltrim(tokens);
-            if (hgl_sv_starts_with_lchop(&tokens, "limit(")) {
+            if (hgl_sv_lchop_if_starts_with(&tokens, "limit(")) {
                 limit = (int64_t) hgl_sv_lchop_u64(&tokens);
-                GEPT_ASSERT_LINE(line, hgl_sv_starts_with_lchop(&tokens, ")"), "Expected \')\'");
+                GEPT_ASSERT_LINE(line, hgl_sv_lchop_if_starts_with(&tokens, ")"), "Expected \')\'");
             }
 
             /* open file */
@@ -361,7 +361,7 @@ int main(int argc, char *argv[])
         if (hgl_sv_equals(directive, HGL_SV_LIT("@bash")) ||
             hgl_sv_equals(directive, HGL_SV_LIT("@perl")) ||
             hgl_sv_equals(directive, HGL_SV_LIT("@python"))) {
-            HglStringBuilder source_code = hgl_sb_make("", 4096);
+            HglStringBuilder source_code = hgl_sb_make(.initial_capacity = 4096);
 
             while (input.length > 0) {
                 line = hgl_sv_lchop_until(&input, '\n');
